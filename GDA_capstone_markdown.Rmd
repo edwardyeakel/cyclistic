@@ -1,0 +1,482 @@
+---
+title: "GDA Capstone - Cyclistic"
+author: "Edward Yeakel"
+date: "2023-07-04"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+<br>
+
+### How did annual members and casual riders use cyclistic bikes differently in Chicago in 2019?
+
+<br>
+<br>
+First we will install and load necessary packages:
+<br>
+```{r}
+library(tidyverse)
+library(lubridate)
+```
+<br>
+
+## Gathering & Formatting
+
+<br>
+<br>
+To start, we will load our datasets, one from each quarter in 2019:
+<br>
+```{r}
+q1_trips <- read_csv("~/Desktop/GDA_capstone_cyclistic/Divvy_Trips_2019_Q1.csv")
+q2_trips <- read_csv("~/Desktop/GDA_capstone_cyclistic/Divvy_Trips_2019_Q2.csv")
+q3_trips <- read_csv("~/Desktop/GDA_capstone_cyclistic/Divvy_Trips_2019_Q3.csv")
+q4_trips <- read_csv("~/Desktop/GDA_capstone_cyclistic/Divvy_Trips_2019_Q4.csv")
+```
+<br>
+<br>
+Lets take a look at our data and see what we are working with, keeping in mind that our goal at this stage is to combine all four data frames into one.
+<br>
+```{r}
+glimpse(q1_trips)
+glimpse(q2_trips)
+glimpse(q3_trips)
+glimpse(q4_trips)
+```
+<br>
+<br>
+Lets rename the columns in each data frame so we can combine them.
+<br>
+```{r}
+q1_2019_trips <- rename(q1_trips,
+                        ride_id = trip_id,
+                        started_at = start_time,
+                        ended_at = end_time,
+                        bike_id = bikeid,
+                        trip_seconds = tripduration,
+                        start_station_id = from_station_id,
+                        start_station_name = from_station_name,
+                        end_station_id = to_station_id,
+                        end_station_name = to_station_name,
+                        usertype = usertype,
+                        sex = gender,
+                        birthyear = birthyear)
+
+q2_2019_trips <- rename(q2_trips,
+                        ride_id = "01 - Rental Details Rental ID",
+                        started_at = "01 - Rental Details Local Start Time",
+                        ended_at = "01 - Rental Details Local End Time",
+                        bike_id = "01 - Rental Details Bike ID",
+                        trip_seconds = "01 - Rental Details Duration In Seconds Uncapped",
+                        start_station_id = "03 - Rental Start Station ID",
+                        start_station_name = "03 - Rental Start Station Name",
+                        end_station_id = "02 - Rental End Station ID",
+                        end_station_name = "02 - Rental End Station Name",
+                        usertype = "User Type",
+                        sex = "Member Gender",
+                        birthyear = "05 - Member Details Member Birthday Year")
+
+q3_2019_trips <- rename(q3_trips,
+                        ride_id = trip_id,
+                        started_at = start_time,
+                        ended_at = end_time,
+                        bike_id = bikeid,
+                        trip_seconds = tripduration,
+                        start_station_id = from_station_id,
+                        start_station_name = from_station_name,
+                        end_station_id = to_station_id,
+                        end_station_name = to_station_name,
+                        usertype = usertype,
+                        sex = gender,
+                        birthyear = birthyear)
+
+q4_2019_trips <- rename(q4_trips,
+                        ride_id = trip_id,
+                        started_at = start_time,
+                        ended_at = end_time,
+                        bike_id = bikeid,
+                        trip_seconds = tripduration,
+                        start_station_id = from_station_id,
+                        start_station_name = from_station_name,
+                        end_station_id = to_station_id,
+                        end_station_name = to_station_name,
+                        usertype = usertype,
+                        sex = gender,
+                        birthyear = birthyear)
+```
+<br>
+<br>
+We will now inspect the data frames for consistency:
+<br>
+```{r}
+glimpse(q1_2019_trips)
+glimpse(q2_2019_trips)
+glimpse(q3_2019_trips)
+glimpse(q4_2019_trips)
+
+```
+<br>
+<br>
+The data frames are ready to be combined:
+<br>
+```{r}
+trips_2019 <- bind_rows(q1_2019_trips,q2_2019_trips,q3_2019_trips,q4_2019_trips)
+```
+<br>
+We want to confirm our data frame is correct:
+<br>
+<br>
+```{r}
+glimpse(trips_2019)
+```
+<br>
+<br>
+Lets create two new columns to help us get a better sense of the data. One column will show trip duration in minutes, the other in hours.
+<br>
+```{r}
+# Find trip duration in minutes and create a column for it
+trips_2019['trip_minutes'] <- trips_2019['trip_seconds'] / 60
+
+# Find trip duration in hours and create a column for it
+trips_2019['trip_hours'] <- trips_2019['trip_minutes'] / 60
+```
+<br>
+<br>
+We will rename the 'usertype' column to fit Cyclistic's current naming conventions.
+<br>
+```{r}
+trips_2019 <- trips_2019 %>%
+  mutate(usertype = recode(usertype,
+                           "Customer" = "casual",
+                           "Subscriber" = "member"))
+```
+<br>
+<br>
+Verify usertype column variable name changes:
+<br>
+```{r}
+table(trips_2019$usertype)
+```
+<br>
+<br>
+To help with out visualizations later on, lets create columns for day, month, year, month name and weekday:
+<br>
+```{r}
+trips_2019$date <- as.Date(trips_2019$started_at)
+trips_2019$month <- format(as.Date(trips_2019$date),"%m")
+trips_2019$day <- format(as.Date(trips_2019$date),"%d")
+trips_2019$year <- format(as.Date(trips_2019$date),"%Y")
+trips_2019$day_of_week <- format(as.Date(trips_2019$date),"%A")
+trips_2019$month_name <- format(as.Date(trips_2019$date),"%B")
+```
+<br>
+<br>
+We need to put days of the week in order:
+<br>
+```{r}
+trips_2019$day_of_week <- ordered(trips_2019$day_of_week, levels = 
+                                       c("Monday", "Tuesday", "Wednesday", 
+                                          "Thursday", "Friday", "Saturday",
+                                          "Sunday"))
+```
+<br>
+<br>
+We also need to put the months of the year in order:
+<br>
+```{r}
+trips_2019$month_name <- ordered(trips_2019$month_name, levels = 
+                                              c("January", "February", "March", 
+                                                "April", "May", "June", "July",
+                                                "August", "September", 
+                                                "October", "November", 
+                                                "December"))
+```
+<br>
+<br>
+Finally, to find the most popular routes, we will create a column for routes by combining the 'start_station_name' column with the 'end_station_name' column:
+<br>
+```{r}
+trips_2019$route <- str_c(trips_2019$start_station_name, 
+                                     " to ", trips_2019$end_station_name)
+```
+<br>
+<br>
+Lets inspect our new columns:
+<br>
+```{r}
+glimpse(trips_2019)
+```
+<br>
+<br>
+<br>
+
+## Cleaning
+
+<br>
+<br>
+The data does not require much cleaning However, 1,849 rides (0.05%) are longer than 24 hours, to avoid skewed data, we will  remove these, average trip in minutes before removing is 24 minutes, after is 19 minutes.
+<br>
+```{r}
+trips_2019_v2 <- subset(trips_2019,trip_hours < 24)
+```
+<br>
+<br>
+<br>
+
+## Analysis
+
+<br>
+<br>
+We will gather a quick summary based on trip duration, in minutes:
+<br>
+```{r}
+summary(trips_2019_v2$trip_minutes)
+```
+<br>
+<br>
+Compare ride lengths of members to casuals:
+<br>
+```{r}
+aggregate(trips_2019_v2$trip_minutes ~ trips_2019_v2$usertype, FUN = mean)
+aggregate(trips_2019_v2$trip_minutes ~ trips_2019_v2$usertype, FUN = median)
+aggregate(trips_2019_v2$trip_minutes ~ trips_2019_v2$usertype, FUN = min)
+aggregate(trips_2019_v2$trip_minutes ~ trips_2019_v2$usertype, FUN = max)
+```
+<br>
+<br>
+Find trip average of each usertype by day of the week:
+<br>
+```{r}
+aggregate(trips_2019_v2$trip_minutes ~ 
+            trips_2019_v2$day_of_week + trips_2019_v2$usertype, FUN = mean)
+```
+<br>
+<br>
+Find trip average of each usertype by month:
+<br>
+```{r}
+aggregate(trips_2019_v2$trip_minutes ~ 
+            trips_2019_v2$month_name + trips_2019_v2$usertype, FUN = mean)
+```
+<br>
+<br>
+Create a separate data frame with only casual users:
+<br>
+```{r}
+trips_2019_v2_casuals <- subset(trips_2019_v2,usertype == 'casual')
+```
+<br>
+<br>
+Create a separate data frame with only members:
+<br>
+```{r}
+trips_2019_v2_members <- subset(trips_2019_v2,usertype == 'member')
+```
+<br>
+<br>
+Breeak down of average ride length, by usertype, for each day of the week:
+<br>
+```{r}
+trips_2019_v2 %>% 
+  group_by(usertype, day_of_week) %>%
+  summarise(number_of_rides = n(), average_duration = mean(trip_minutes)) %>%
+  arrange(usertype, day_of_week)
+```
+<br>
+<br>
+Break down of average ride length, by usertype, for each month of the year:
+<br>
+```{r}
+trips_2019_v2 %>% 
+  group_by(usertype, month_name) %>%
+  summarise(number_of_rides = n(), average_duration = mean(trip_minutes)) %>%
+  arrange(usertype, month_name) %>% 
+  print(n=24)
+```
+<br>
+<br>
+For casuals, where are they most likely to pick up a bike?
+<br>
+```{r}
+trips_2019_v2_casuals %>% 
+  group_by(usertype, start_station_name) %>% 
+  summarise(Rides = n()) %>% 
+  arrange(usertype, desc(Rides))
+```
+<br>
+<br>
+For members, where are they most likely to pick up a bike?
+<br>
+```{r}
+trips_2019_v2_members %>% 
+  group_by(usertype, start_station_name) %>% 
+  summarise(Rides = n()) %>% 
+  arrange(desc(Rides))
+```
+<br>
+<br>
+For casuals, where are they most likely to drop off a bike?
+<br>
+```{r}
+trips_2019_v2_casuals %>% 
+  group_by(usertype, end_station_name) %>% 
+  summarise(Rides = n()) %>% 
+  arrange(usertype, desc(Rides))
+```
+<br>
+<br>
+For members, where are they most likely to drop off a bike?
+<br>
+```{r}
+trips_2019_v2_members %>% 
+  group_by(usertype, end_station_name) %>% 
+  summarise(Rides = n()) %>% 
+  arrange(desc(Rides))
+```
+<br>
+<br>
+For casuals, what is the most used bike route?
+<br>
+```{r}
+trips_2019_v2_casuals %>% 
+  group_by(usertype, route) %>% 
+  summarise(Rides = n()) %>% 
+  arrange(desc(Rides))
+```
+<br>
+<br>
+For members, what is the most used bike route?
+<br>
+```{r}
+trips_2019_v2_members %>% 
+  group_by(usertype, route) %>% 
+  summarise(Rides = n()) %>% 
+  arrange(desc(Rides))
+```
+<br>
+<br>
+For our final analysis, lets look how ridership breaks down by sex:
+<br>
+```{r}
+trips_2019_v2 %>% 
+  group_by(usertype, sex) %>% 
+  summarise(Rides = n()) %>% 
+  arrange(usertype, desc(Rides))
+```
+<br>
+<br>
+<br>
+
+## Visualizations
+
+<br>
+<br>
+Make bar plot comparing rides per month for each usertype:
+<br>
+```{r}
+trips_2019_v2 %>% 
+  group_by(month_name, usertype) %>%
+  summarise(number_of_rides = n(), average_duration = mean(trip_minutes)) %>%
+  arrange(usertype, month_name) %>% 
+  ggplot(aes(x = month_name, y = number_of_rides, fill = usertype)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("#50CAF7","#F59669")) +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+  scale_y_continuous(labels = scales::comma) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust= 1)) +
+  labs(title = "Rides per Month, Memebers vs Casuals ", subtitle = "2019", 
+       x = " ", y = "Number of Rides")
+```
+<br>
+<br>
+Make bar plot comparing rides per month for casuals:
+<br>
+```{r}
+trips_2019_v2_casuals %>% 
+  group_by(month_name, usertype) %>%
+  summarise(number_of_rides = n(), average_duration = mean(trip_minutes)) %>%
+  arrange(usertype, month_name) %>% 
+  ggplot(aes(x = month_name, y = number_of_rides, fill = usertype)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("#50CAF7")) +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+  scale_y_continuous(labels = scales::comma) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust= 1)) +
+  labs(title = "Rides per Month, Casuals ", subtitle = "2019", 
+       x = " ", y = "Number of Rides", fill = " ")
+```
+<br>
+<br>
+Create a bar plot to view rides per weekday for each usertype:
+<br>
+```{r}
+trips_2019_v2 %>% 
+  group_by(day_of_week, usertype) %>%
+  summarise(number_of_rides = n(), average_duration = mean(trip_minutes)) %>%
+  arrange(usertype, day_of_week) %>% 
+  ggplot(aes(x = day_of_week, y = number_of_rides, fill = usertype))+
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("#50CAF7","#F59669")) +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = "Rides per Weekday, Memebers vs Casuals ", subtitle = "2019", 
+       x = " ", y = "Number of Rides")
+```
+
+
+Make bar plot comparing rides per weekday for casuals:
+
+```{r}
+trips_2019_v2_casuals %>% 
+  group_by(day_of_week, usertype) %>%
+  summarise(number_of_rides = n(), average_duration = mean(trip_minutes)) %>%
+  arrange(usertype, day_of_week) %>% 
+  ggplot(aes(x = day_of_week, y = number_of_rides, fill = usertype)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("#50CAF7")) +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+  scale_y_continuous(labels = scales::comma) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust= 1)) +
+  labs(title = "Rides per Month, Casuals ", subtitle = "2019", 
+       x = " ", y = "Number of Rides", fill = " ")
+```
+<br>
+<br>
+Make a bar graph comparing sexes by usertype:
+<br>
+```{r}
+trips_2019_v2 %>% 
+  group_by(usertype, sex) %>% 
+  summarise(Rides = n()) %>% 
+  arrange(usertype, desc(Rides)) %>% 
+  ggplot(aes(x = sex, y = Rides, fill = usertype)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("#50CAF7","#F59669","gray")) +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = "Usertype by Sex, Number of Rides", subtitle = "2019", 
+       x = " ", y = "Number of Rides", fill = " ")
+```
+<br>
+<br>
+Make a bar graph comparing sexes for casuals:
+<br>
+```{r}
+trips_2019_v2_casuals %>% 
+  group_by(usertype, sex) %>% 
+  summarise(Rides = n()) %>% 
+  arrange(usertype, desc(Rides)) %>% 
+  ggplot(aes(x = sex, y = Rides, fill = usertype)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("#50CAF7","#F59669")) +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = "Casuals by Sex, Number of Rides", subtitle = "2019", 
+       x = " ", y = "Number of Rides", fill = " ")
+```
+
+<br>
+<br>
+<br>
+<br>
